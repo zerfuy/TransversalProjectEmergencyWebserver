@@ -6,6 +6,7 @@
     <title>Quick Start - Leaflet</title>
 
     <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="3" >
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/leaflet.css' ) }}">
@@ -32,29 +33,16 @@
     }).addTo(map);
 
     var fire_engines = JSON.parse('{{ fire_engines}}');
-    var fromTo = JSON.parse('{{ fromTo}}');
-    
-    //display all routes
-    fromTo.forEach(function(elem){
-        from = elem[0];
-        to = elem[1];
-        fetch("http://router.project-osrm.org/route/v1/driving/" + from[1] + "," + from[0] + ";" + to[1] + "," + to[0] + "?overview=full")
-        .then(function(response) {
-            if(response.ok){
-                ret = response.json();
-                console.log("ans ok");
-                return ret;
-            }else{
-                console.log("ans nok");
-            }
-        })
-        .then(function(ret){
-            let points = decode(ret.routes[0].geometry, 5);
-            var polyline = new L.Polyline(points).addTo(map);
-        });
-    })
-    
-    
+    var fires = JSON.parse('{{ fires}}');
+    // different handling was necessary for geometry objects
+    var routingInfo = htmlDecode('{{ routingInfo}}');
+    routes = routingInfo.split("', '");
+    routes.forEach(function(elem){
+        elem = elem.replace(/\['/g, "").replace(/']/g, "");
+        let points = decode(elem, 5);
+        var polyline = new L.Polyline(points).addTo(map);
+    });
+
 
     //display all trucks
     fire_engines.forEach(function(elem){
@@ -62,19 +50,18 @@
         .bindPopup("Fire engine")
     });
 
-    L.circle([51.508, -0.11], 500, {
-        color: 'red',
-        fillColor: '#f03',
-        fillOpacity: 0.5
-    }).addTo(map).bindPopup("Ongoing Fire");
-
+    //display all fires
+    fires.forEach(function(elem){
+        L.marker([elem[0], elem[1]]).addTo(map)
+        .bindPopup("fire")
+    });
 
     var popup = L.popup();
 
     function onMapClick(e) {
         popup
             .setLatLng(e.latlng)
-            .setContent("You clicked the map at " + e.latlng.toString())
+            .setContent(e.latlng.toString())
             .openOn(map);
     }
 
@@ -125,6 +112,13 @@ function decode(str, precision) {
 
     return coordinates;
 };
+
+function htmlDecode(input){
+    var e = document.createElement('textarea');
+    e.innerHTML = input;
+    // handle case of empty input
+    return e.childNodes.length === 0 ? "" : e.childNodes[0].nodeValue;
+}
 </script>
 
 
