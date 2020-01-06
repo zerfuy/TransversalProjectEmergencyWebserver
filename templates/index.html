@@ -52,8 +52,12 @@
 
     //display all fires
     fires.forEach(function(elem){
-        L.marker([elem[0], elem[1]]).addTo(map)
-        .bindPopup("fire")
+        L.circle([elem[0], elem[1]], {
+            color: 'red',
+            fillColor: '#f03',
+            fillOpacity: 0.5,
+            radius: 100
+        }).addTo(map).bindPopup("fire");
     });
 
     var popup = L.popup();
