@@ -1,6 +1,6 @@
 function refresh(fire_engines, fires, routingInfo) {
     document.getElementById('mapid').innerHTML = "<div id='mapid' style='width: 100%; height: 100%;'></div>";
-    var map = L.map('mapid').setView([45.784680, 4.893310], 13);
+    var map = L.map('mapid').setView([45.772976, 4.860991], 13);
     map.on('click', onMapClick);
 
     L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {

@@ -8,19 +8,20 @@
 from flask import Flask, render_template
 from flask_assets import Environment, Bundle
 from flask_ckeditor import CKEditor
-from flask_mysqldb import MySQL
 import json
 import psycopg2
 import ctypes
 import serial
 import sys
 import requests
-import json
-
+from flask_debugtoolbar import DebugToolbarExtension
+import logging
 
 app = Flask(__name__)
-app.secret_key = 'dev key'
+app.debug = True
+app.secret_key = 'development key'
 
+toolbar = DebugToolbarExtension(app)
 assets = Environment(app)
 ckeditor = CKEditor(app)
 
@@ -47,7 +48,48 @@ js = Bundle('js/jquery.min.js',
 assets.register('js_all', js)
 assets.register('css_all', css)
 
-mysql = MySQL(app)
+def SendInflux():
+    user = ''
+    password = ''
+    dbname = 'historisation'
+    dbuser = ''
+    dbuser_password = 'my_secret_password'
+    json_body = [
+        {
+            "measurement": "analysis_data",
+            "tags": {
+                "type": "fire",
+            },
+            "time": str(datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')),
+            "fields": {
+                "Float_value": 0.64,
+                "Int_value": 3,
+                "String_value": "Text",
+                "Bool_value": True
+            }
+        }
+    ]
+
+    client = InfluxDBClient(host, port, user, password, dbname)
+
+    print("Create database: " + dbname)
+    client.create_database(dbname)
+
+    print("Write points: {0}".format(json_body))
+    client.write_points(json_body)
+
+
+def getSer():
+    if sys.platform.startswith('win'):
+        SERIALPORT = "COM4"
+    else:
+        SERIALPORT = "/dev/ttyUSB1"
+
+    return serial.Serial(
+        port=SERIALPORT,
+        baudrate=115200
+    )
+
 
 # potential improvments : 
 # async calls via multiple connections
@@ -55,17 +97,9 @@ mysql = MySQL(app)
 def index():
 
     # read serial port to get fires
-    if sys.platform.startswith('win'):
-        SERIALPORT = "COM4"
-    else:
-        SERIALPORT = "/dev/ttyUSB0"
+    ser = getSer()
 
     a = ""
-
-    ser = serial.Serial(
-        port=SERIALPORT,
-        baudrate=115200
-    )
 
     try:
         pass
@@ -222,7 +256,7 @@ def index():
             fromTo.append([fromEngine, toFire])
 
 
-        # TODO
+        # TODO influx insert
 
         # Parse fire_engines from 0 à x, donc on peut attribuer les chemins sans le meme ordre
         routingInfo = list()
@@ -258,9 +292,10 @@ def index():
                     str(round(ft[0][1], 4))))
                 routingInfo.append(str(cur.fetchone()[0]))
 
-        
+        logging.warning("fire_engines_pos : " + str(fire_engines_pos))
+        logging.warning("routingInfo : " + str(routingInfo))
+        logging.warning("firesToDisp : " + str(firesToDisp))
         return render_template('index.html', fire_engines=fire_engines_pos, routingInfo=routingInfo, fires=firesToDisp)
     except Exception as e:
-        cur.close()
         return render_template('index.html')
         ctypes.windll.user32.MessageBoxW(0, str(e), "Your title", 1)
