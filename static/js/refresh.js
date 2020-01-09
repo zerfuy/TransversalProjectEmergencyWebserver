@@ -1,4 +1,4 @@
-function refresh(fire_engines, fires, routingInfo) {
+function refresh(fire_engines, fires, routingInfo, stations_pos) {
     document.getElementById('mapid').innerHTML = "<div id='mapid' style='width: 100%; height: 100%;'></div>";
     var map = L.map('mapid').setView([45.772976, 4.860991], 13);
     map.on('click', onMapClick);
@@ -34,6 +34,16 @@ function refresh(fire_engines, fires, routingInfo) {
             fillOpacity: 0.5,
             radius: 100
         }).addTo(map).bindPopup("fire");
+    });
+
+    //display all stations
+    stations_pos.forEach(function(elem){
+        L.circle([elem[0], elem[1]], {
+            color: 'blue',
+            fillColor: '#03f',
+            fillOpacity: 0.5,
+            radius: 100
+        }).addTo(map).bindPopup("station");
     });
 
     var popup = L.popup();

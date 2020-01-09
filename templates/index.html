@@ -6,7 +6,7 @@
     <title>Quick Start - Leaflet</title>
 
     <meta charset="utf-8" />
-    <meta http-equiv="refresh" content="3" >
+    <meta http-equiv="refresh" content="6" >
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/leaflet.css' ) }}">
@@ -23,26 +23,8 @@
     var fire_engines = JSON.parse('{{ fire_engines}}');
     var fires = JSON.parse('{{ fires}}');
     var routingInfo = htmlDecode('{{ routingInfo}}');
-    refresh(fire_engines, fires, routingInfo);
-
-
-    //Map container is already initialized
-    /*function refreshAjax(){
-        $.ajax({
-            url: '/getVals',
-            dataType: "json",
-            success: function(data) {
-                console.log(data);
-                refresh(data[0], data[1], data[2])
-                refreshAjax();
-            },
-            error: function() {
-                console.log("sike");
-                refreshAjax();
-            }
-        });
-    }*/
-    
+    var stations_pos = JSON.parse('{{ stations_pos}}');
+    refresh(fire_engines, fires, routingInfo, stations_pos);
 </script>
 
 </body>

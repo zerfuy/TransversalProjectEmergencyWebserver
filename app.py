@@ -16,6 +16,8 @@ import sys
 import requests
 from flask_debugtoolbar import DebugToolbarExtension
 import logging
+import subprocess
+
 
 app = Flask(__name__)
 app.debug = True
@@ -48,6 +50,24 @@ js = Bundle('js/jquery.min.js',
 assets.register('js_all', js)
 assets.register('css_all', css)
 
+
+def getFromTo(interventions_complex, fire_engines, fires):
+    ret = []
+    for intervention in interventions_complex:
+            print(str(intervention))
+            idEngine = intervention[0]
+            idFire = intervention[1]
+            fromEngine = []
+            toFire = []
+            for item in fire_engines:
+                if item[2] == idEngine:
+                    fromEngine = item[:-1]
+            for item in fires:
+                if item[2] == idFire:
+                    toFire = item[:-1]
+            ret.append([fromEngine, toFire, intervention[2]])
+    return ret
+
 def SendInflux():
     user = ''
     password = ''
@@ -78,7 +98,6 @@ def SendInflux():
     print("Write points: {0}".format(json_body))
     client.write_points(json_body)
 
-
 def getSer():
     if sys.platform.startswith('win'):
         SERIALPORT = "COM4"
@@ -90,24 +109,20 @@ def getSer():
         baudrate=115200
     )
 
-
-# potential improvments : 
-# async calls via multiple connections
 @app.route('/')
 def index():
-
     # read serial port to get fires
     ser = getSer()
-
     a = ""
 
     try:
-        pass
+        print("waiting 4")
         a = ser.readline()
+        print("got serial")
         ser.close()
     except serial.SerialException:
         ser.close()
-        print("Serial {} port not available".format(SERIALPORT))
+        print("Serial port not available")
 
     tab = []
     finalfires = []
@@ -164,14 +179,12 @@ def index():
         conn.commit()
 
         # get fire_engines
-        cur.execute("select {0}, {1}, {2} from {3} where {4} in (select {5} from {6})".format(
+        cur.execute("select {0}, {1}, {2} from {3} ".format(
             fire_engine_table["fire_engine_x_pos"],
             fire_engine_table["fire_engine_y_pos"],
             fire_engine_table["fire_engine_id"],
             fire_engine_table["fire_engine_table_name"],
-            fire_engine_table["fire_engine_id"],
-            intervention_table["intervention_id_fire_engine"],
-            intervention_table["intervention_table_name"])
+            fire_engine_table["fire_engine_id"])
         )
         fire_engines = []
         row = cur.fetchone()
@@ -179,11 +192,18 @@ def index():
             fire_engines.append(list(row))
             row = cur.fetchone()
 
+        # get stations
+        cur.execute("select real_x, real_y from real_pos where id in (select id from station)")
+        stations_pos = []
+        row = cur.fetchone()
+        while row is not None:
+            stations_pos.append(list(row))
+            row = cur.fetchone()
+
         # get fire_engines positions
         fire_engines_pos = []
         for elem in fire_engines:
             fire_engines_pos.append(elem[:-1])
-
 
         # get active fires to disp
         cur.execute("select {0}, {1}, {2}, intensity from {3}, {4} where {5} = {6} and intensity > 0".format(
@@ -200,7 +220,6 @@ def index():
         while row is not None:
             firesToDisp.append(list(row))
             row = cur.fetchone()
-
 
         # get fires
         cur.execute("select {0}, {1}, {2} from {3}, {4} where {5} = {6}".format(
@@ -241,20 +260,8 @@ def index():
             interventions.append(elem[:-1])
 
         # Establish itineraries from fire_engines to active fires, according to the existing interventions
-        fromTo = []
-        for intervention in interventions:
-            idEngine = intervention[0]
-            idFire = intervention[1]
-            fromEngine = []
-            toFire = []
-            for item in fire_engines:
-                if item[2] == idEngine:
-                    fromEngine = item[:-1]
-            for item in fires:
-                if item[2] == idFire:
-                    toFire = item[:-1]
-            fromTo.append([fromEngine, toFire])
-
+        fromTo = getFromTo(interventions_complex, fire_engines, fires)
+        print(str(fromTo))
 
         # TODO influx insert
 
@@ -263,22 +270,16 @@ def index():
         for ft in fromTo:
             link = "http://router.project-osrm.org/route/v1/driving/" + str(ft[0][1]) + "," + str(ft[0][0]) + ";" + str(ft[1][1]) + "," + str(ft[1][0]) + "?overview=full"
             if "routes" in requests.get(link).json():
-                #ctypes.windll.user32.MessageBoxW(0, str(ft), "Your title", 1)
                 res = requests.get(link).json()["routes"][0]["geometry"]
                 routingInfo.append(res)
                 # insert routes in db
-                cur.execute(("update {0} set {1} = '{2}' where {3} = (select {4} from {5} where round({6}::numeric,4) = {7} and round({8}::numeric,4) = {9})").format(
+                cur.execute(("update {0} set {1} = '{2}' where intervention.id = {3}").format(
                     intervention_table["intervention_table_name"],
                     intervention_table["intervention_route"],
                     str(res).replace("['", "").replace("']", ""),
-                    intervention_table["intervention_id_fire_engine"],
-                    fire_engine_table["fire_engine_id"],
-                    fire_engine_table["fire_engine_table_name"],
-                    fire_engine_table["fire_engine_x_pos"],
-                    str(round(ft[0][0], 4)),
-                    fire_engine_table["fire_engine_x_pos"],
-                    str(round(ft[0][1], 4))))
+                    ft[2],))
                 conn.commit()
+
             else:
                 cur.execute("select {0} from {1} where {2} in (select {3} from {4} where round({5}::numeric,4) = {6} and round({7}::numeric,4) = {8})".format(
                     intervention_table["intervention_route"],
@@ -292,10 +293,13 @@ def index():
                     str(round(ft[0][1], 4))))
                 routingInfo.append(str(cur.fetchone()[0]))
 
-        logging.warning("fire_engines_pos : " + str(fire_engines_pos))
-        logging.warning("routingInfo : " + str(routingInfo))
-        logging.warning("firesToDisp : " + str(firesToDisp))
-        return render_template('index.html', fire_engines=fire_engines_pos, routingInfo=routingInfo, fires=firesToDisp)
+        if 'cur' in locals():
+            if cur is not None:
+                cur.close()
+        return render_template('index.html', fire_engines=fire_engines_pos, routingInfo=routingInfo, fires=firesToDisp, stations_pos=stations_pos)
     except Exception as e:
-        return render_template('index.html')
-        ctypes.windll.user32.MessageBoxW(0, str(e), "Your title", 1)
+        print(e)
+        if 'cur' in locals():
+            if cur is not None:
+                cur.close()
+        return render_template('index.html', fire_engines=[], routingInfo=[], fires=[], stations_pos=[])
